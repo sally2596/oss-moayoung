@@ -165,28 +165,30 @@ export class App {
   firstlipdiv: boolean = true;
   fisrtFaceDetection: boolean = true;
 
+  isInWaitroom: boolean = true;
+  waitroomCameraOn: boolean = true;
+
   myFaceMesh: FaceMesh;
   faceLeft: number;
   faceRight: number;
   faceUp: number;
   faceDown: number;
-  isFaceDetectionSuccess: boolean;
   isStartFaceDetect: boolean;
   isFaceDetectionSet: boolean = false;
   faceDetectionState: any = -99;
   faceDetectionStateCount: any;
-  isInWaitroom: boolean = true;
-  waitroomCameraOn: boolean = true;
+  partnerfaceMesh: FaceMesh;
+  isVideoLoading: boolean = false;
+  isEntering: boolean = false;
 
   myHands: Hands;
   isHandIn: boolean = false;
   isHandDetectionSpeaking: boolean = false;
 
-  partnerfaceMesh: FaceMesh;
-
   featureOnOffVueObject: any;
   camerastate: boolean;
   interval: any;
+  videoLoadingInterval: any;
 
   constructor() {
     this.yourVideo = document.getElementById('yourVideo');
@@ -264,8 +266,6 @@ export class App {
           app.myFaceMesh.onResults(onResultsOnFaceMesh);
 
           if (app.fisrtFaceDetection) {
-            //얼굴인식 켜는 순간 interval 설정하고 다른 곳에서는 interval 설정안함
-            //interval내에서 if문으로 처리하기 때문
             app.interval = setInterval(async () => {
               if (
                 ((app.isInWaitroom && app.waitroomCameraOn) ||
@@ -292,6 +292,8 @@ export class App {
                 //얼굴인식 세팅이 완료된 상태
                 if (
                   app.isStartFaceDetect &&
+                  ((app.isInWaitroom && app.waitroomCameraOn) ||
+                    (!app.isInWaitroom && app.camerastate)) &&
                   $(document.getElementById('faceDetect')).prop('checked') ==
                     true
                 ) {
@@ -311,9 +313,23 @@ export class App {
                 }
 
                 if (face_input == null) {
-                  // 얼굴인식을 켜고 통화방으로 넘어갈 때 null 이 되는 순간이 생김
-                  app.isInWaitroom = false;
-                  window.speechSynthesis.cancel();
+                  if (!app.isEntering) {
+                    var count = 0;
+                    app.isEntering = true;
+                    app.isInWaitroom = false;
+
+                    app.videoLoadingInterval = setInterval(async () => {
+                      window.speechSynthesis.cancel();
+                      console.log('Video Loading...');
+                      count++;
+                      if (count == 15) {
+                        clearInterval(app.videoLoadingInterval);
+                        app.isVideoLoading = false;
+                        console.log('Video Loading Complete');
+                        app.faceDetectionState = 1;
+                      }
+                    }, 200);
+                  }
                 } else if (face_input.videoHeight != 0) {
                   if (
                     ((app.isInWaitroom && app.waitroomCameraOn) ||
@@ -341,23 +357,22 @@ export class App {
               $(document.getElementById('faceDetect')).prop('checked') ==
                 true &&
               results.multiHandLandmarks.length > 0
-            ) {
+            )
               app.isHandIn = true;
-            } else if (
+            else if (
               $(document.getElementById('faceDetect')).prop('checked') ==
                 true &&
               results.multiHandLandmarks.length <= 0
-            ) {
+            )
               app.isHandIn = false;
-            }
           }
           function onResultsOnFaceMesh(results) {
-            if (
+            if (app.isVideoLoading) console.log('Video Loading...');
+            else if (
               $(document.getElementById('faceDetect')).prop('checked') ==
                 true &&
               results.multiFaceLandmarks[0]
             ) {
-              app.isFaceDetectionSuccess = true;
               if (results.multiFaceLandmarks[0][10].y <= app.faceUp) {
                 console.log('Face Out Direction: Up');
                 if (app.faceDetectionState !== -1) {
@@ -483,7 +498,23 @@ export class App {
   }
 
   toggleCameraInApp(isCameraOn) {
+    var count = 0;
     app.camerastate = isCameraOn;
+
+    if (isCameraOn) {
+      app.isVideoLoading = true;
+      app.videoLoadingInterval = setInterval(async () => {
+        window.speechSynthesis.cancel();
+        console.log('Video Loading...');
+        count++;
+        if (count == 15) {
+          clearInterval(app.videoLoadingInterval);
+          app.isVideoLoading = false;
+          console.log('Video Loading Complete');
+          app.faceDetectionState = 1;
+        }
+      }, 200);
+    }
   }
 
   run() {
